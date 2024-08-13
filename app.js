@@ -1,78 +1,81 @@
-import dotenv from 'dotenv'
-import fs from 'fs'
-import http from 'http'
-import { Octokit, App } from 'octokit'
-import { createNodeMiddleware } from '@octokit/webhooks'
+import dotenv from 'dotenv';
+import express from 'express';
+import fs from 'fs';
+import { App } from '@octokit/app';
+import { createNodeMiddleware } from '@octokit/webhooks';
 
 // Load environment variables from .env file
-dotenv.config()
+dotenv.config();
 
 // Set configured values
-const appId = process.env.APP_ID
-const privateKeyPath = process.env.PRIVATE_KEY_PATH
-const privateKey = fs.readFileSync(privateKeyPath, 'utf8')
-const secret = process.env.WEBHOOK_SECRET
-const enterpriseHostname = process.env.ENTERPRISE_HOSTNAME
-const messageForNewPRs = fs.readFileSync('./message.md', 'utf8')
+const appId = process.env.APP_ID;
+const privateKeyPath = process.env.PRIVATE_KEY_PATH;
+const webhookSecret = process.env.WEBHOOK_SECRET;
+const port = process.env.PORT || 3000;
 
-// Create an authenticated Octokit client authenticated as a GitHub App
-const app = new App({
-  appId,
-  privateKey,
+const app = express();
+app.use(express.json());
+
+// Read the private key from the file
+const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+
+const githubApp = new App({
+  appId: appId,
+  privateKey: privateKey,
   webhooks: {
-    secret
+    secret: webhookSecret
   },
-  ...(enterpriseHostname && {
-    Octokit: Octokit.defaults({
-      baseUrl: `https://${enterpriseHostname}/api/v3`
-    })
-  })
-})
+});
 
-// Optional: Get & log the authenticated app's name
-const { data } = await app.octokit.request('/app')
+// Middleware to log all incoming requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
-// Read more about custom logging: https://github.com/octokit/core.js#logging
-app.octokit.log.debug(`Authenticated as '${data.name}'`)
+// Handle app installation
+githubApp.webhooks.on('installation.created', async ({ octokit, payload }) => {
+  console.log('App installed! Installation ID:', payload.installation.id);
+  
+  // Generate an installation access token
+  const { data: { token } } = await octokit.apps.createInstallationAccessToken({
+    installation_id: payload.installation.id,
+  });
+  
+  console.log('Installation Access Token:', token);
+});
 
-// Subscribe to the "pull_request.opened" webhook event
-app.webhooks.on('pull_request.opened', async ({ octokit, payload }) => {
-  console.log(`Received a pull request event for #${payload.pull_request.number}`)
-  try {
-    await octokit.rest.issues.createComment({
-      owner: payload.repository.owner.login,
-      repo: payload.repository.name,
-      issue_number: payload.pull_request.number,
-      body: messageForNewPRs
-    })
-  } catch (error) {
-    if (error.response) {
-      console.error(`Error! Status: ${error.response.status}. Message: ${error.response.data.message}`)
+// Handle workflow run events
+githubApp.webhooks.on('workflow_run', async ({ octokit, payload }) => {
+  console.log('Workflow run detected!');
+  console.log('Action:', payload.action);
+  console.log('Workflow name:', payload.workflow_run.name);
+  console.log('Repository:', payload.repository.full_name);
+});
+
+// Create a webhook endpoint
+const middleware = createNodeMiddleware(githubApp.webhooks);
+
+app.post('/github/webhooks', (req, res) => {
+  console.log('Received webhook request');
+  middleware(req, res, (err) => {
+    if (err) {
+      console.error('Error in webhook middleware:', err);
+      res.status(500).send('Webhook Error');
     } else {
-      console.error(error)
+      res.status(200).send('Webhook received');
     }
-  }
-})
+  });
+});
 
-// Optional: Handle errors
-app.webhooks.onError((error) => {
-  if (error.name === 'AggregateError') {
-    // Log Secret verification errors
-    console.log(`Error processing request: ${error.event}`)
-  } else {
-    console.log(error)
-  }
-})
+// Add a test route
+app.get('/test', (req, res) => {
+  res.status(200).send('Server is running');
+});
 
-// Launch a web server to listen for GitHub webhooks
-const port = process.env.PORT || 3000
-const path = '/api/webhook'
-const localWebhookUrl = `http://0.0.0.0:${port}${path}`
-
-// See https://github.com/octokit/webhooks.js/#createnodemiddleware for all options
-const middleware = createNodeMiddleware(app.webhooks, { path })
-
-http.createServer(middleware).listen(port, () => {
-  console.log(`Server is listening for events at: ${localWebhookUrl}`)
-  console.log('Press Ctrl + C to quit.')
-})
+// Start the server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+  console.log(`Webhook URL: http://203.217.148.156/github/webhooks`);
+  console.log(`Test URL: http://203.217.148.156/test`);
+});
