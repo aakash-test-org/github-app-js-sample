@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: buildjet-2vcpu-ubuntu-2204
+    runs-on: arc-runner-set-aki-4
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-node@v3
