@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: luxor-apps
+    runs-on: buildjet-2vcpu-ubuntu-2204
     steps:
     - uses: actions/checkout@v3
     - uses: actions/setup-node@v3
