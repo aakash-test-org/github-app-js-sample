@@ -1,0 +1,74 @@
+name: Parallel Jobs with Dynamic Sleep
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner to use'
+        required: true
+        default: 'ubuntu-latest'
+      sleep_time:
+        description: 'Sleep time in seconds'
+        required: true
+        default: '60'
+
+jobs:
+  job1:
+    runs-on: ${{ github.event.inputs.runner }}
+    outputs:
+      duration: ${{ steps.run_job.outputs.duration }}
+    steps:
+    - name: Run Job 1
+      id: run_job
+      run: |
+        start_time=$(date +%s)
+        sleep ${{ github.event.inputs.sleep_time }}
+        end_time=$(date +%s)
+        echo "duration=$((end_time - start_time))" >> $GITHUB_OUTPUT
+
+  job2:
+    runs-on: ${{ github.event.inputs.runner }}
+    outputs:
+      duration: ${{ steps.run_job.outputs.duration }}
+    steps:
+    - name: Run Job 2
+      id: run_job
+      run: |
+        start_time=$(date +%s)
+        sleep ${{ github.event.inputs.sleep_time }}
+        end_time=$(date +%s)
+        echo "duration=$((end_time - start_time))" >> $GITHUB_OUTPUT
+
+  job3:
+    runs-on: ${{ github.event.inputs.runner }}
+    outputs:
+      duration: ${{ steps.run_job.outputs.duration }}
+    steps:
+    - name: Run Job 3
+      id: run_job
+      run: |
+        start_time=$(date +%s)
+        sleep ${{ github.event.inputs.sleep_time }}
+        end_time=$(date +%s)
+        echo "duration=$((end_time - start_time))" >> $GITHUB_OUTPUT
+
+  summary:
+    needs: [job1, job2, job3]
+    runs-on: ${{ github.event.inputs.runner }}
+    steps:
+    - name: Summarize jobs
+      run: |
+        echo "WORKFLOW_START=$(date +%s)" >> $GITHUB_ENV
+        echo "# Parallel Jobs Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- Runner: ${{ github.event.inputs.runner }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Configured sleep time: ${{ github.event.inputs.sleep_time }} seconds" >> $GITHUB_STEP_SUMMARY
+        echo "## Job Durations" >> $GITHUB_STEP_SUMMARY
+        echo "- Job 1: ${{ needs.job1.outputs.duration }} seconds" >> $GITHUB_STEP_SUMMARY
+        echo "- Job 2: ${{ needs.job2.outputs.duration }} seconds" >> $GITHUB_STEP_SUMMARY
+        echo "- Job 3: ${{ needs.job3.outputs.duration }} seconds" >> $GITHUB_STEP_SUMMARY
+        echo "## Analysis" >> $GITHUB_STEP_SUMMARY
+        echo "- Total theoretical runtime: ${{ github.event.inputs.sleep_time }} seconds" >> $GITHUB_STEP_SUMMARY
+        workflow_end=$(date +%s)
+        total_duration=$((workflow_end - WORKFLOW_START))
+        echo "- Actual total duration: $total_duration seconds" >> $GITHUB_STEP_SUMMARY
